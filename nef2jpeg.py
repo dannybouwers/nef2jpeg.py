@@ -11,6 +11,8 @@ class Photo:
         self.dirname = os.path.dirname(name)
         self.target = os.path.join(self.dirname, f'{self.filename}.jpg')
         self.doOverwrite = False
+        self.doEnhance = False
+        self.boxSize = None
 
     def __str__(self) -> str:
         m = f'File {self.rawfile} with name {self.filename} in dir {self.dirname} will be opened'
