@@ -9,9 +9,68 @@ class Photo:
         self.rawfile = name
         self.filename = os.path.splitext(os.path.basename(name))[0]
         self.dirname = os.path.dirname(name)
+        self.target = os.path.join(self.dirname, f'{self.filename}.jpg')
+        self.doOverwrite = False
 
-    def __repr__(self):
-        return f'File {self.filename} in dir {self.dirname}'
+    def __str__(self) -> str:
+        m = f'File {self.rawfile} with name {self.filename} in dir {self.dirname} will be opened'
+        
+        if self.boxSize:
+            m = f'{m}\nThe photo will be resized to fit a {self.boxSize}x{self.boxSize}px box.'
+
+        if self.doEnhance:
+            m = f'{m}\nThe photo will be enhanced using Ying New Image Contrast Enhancement'
+
+        m = f'{m}\nIt will be saved as {self.target}'
+
+        if self.doOverwrite:
+            m = f'{m}\nThe file will be overwritten if it already exists'
+        else:
+            m = f'{m}\nIf the file already exists, processing will be omitted and the file will not be overwritten'
+
+        return m
+
+    def __repr__(self) -> str:
+        m = f'Photo("{self.rawfile}")'
+
+        if self.boxSize:
+            m = f'{m}.resize({self.boxSize})'
+
+        if self.doEnhance:
+            m = f'{m}.enhance()'
+
+        if self.doOverwrite:
+            m = f'{m}.overwrite()'
+
+        return m
+
+    def resize(self, boxSize) -> 'Photo':
+        self.boxSize = boxSize
+        return self
+
+    def __resize(self):
+        f1 = self.boxSize / self.image.shape[1]
+        f2 = self.boxSize / self.image.shape[0]
+        f = min(f1, f2)  # resizing factor
+        dim = (int(self.image.shape[1] * f), int(self.image.shape[0] * f))
+        self.image = cv2.resize(self.image, dim)
+
+        return self
+
+    def enhance(self) -> 'Photo':
+        self.doEnhance = True
+        return self
+
+    def __enhance(self):
+        self.image = ying.nice(self.image)
+        return self
+
+    def overwrite(self) -> 'Photo':
+        self.doOverwrite = True
+        return self
+
+    def checkExists(self) -> bool:
+        return os.path.exists(self.target)
 
     def open(self):
         with rawpy.imread(self.rawfile) as raw:
@@ -19,38 +78,34 @@ class Photo:
         
         self.image=cv2.cvtColor(rgbImg, cv2.COLOR_RGB2BGR)
         
-        return self
+        if self.boxSize:
+            self.__resize()
 
-    def resize(self, boxSize):
-        f1 = boxSize / self.image.shape[1]
-        f2 = boxSize / self.image.shape[0]
-        f = min(f1, f2)  # resizing factor
-        dim = (int(self.image.shape[1] * f), int(self.image.shape[0] * f))
-        self.image = cv2.resize(self.image, dim)
+        if self.doEnhance:
+            self.__enhance()
 
-        return self
+        return self.image
 
-    def enhance(self):
-        self.image = ying.nice(self.image)
+    def save (self, target=None) -> str:
+        if target is not None:
+            self.target = target
 
-        return self
-
-    def save (self, target=None):
-        if target is None:
-            self.target = os.path.join(self.dirname, f'{self.filename}.jpg' )
-
-        cv2.imwrite(f'{self.target}', self.image)
+        if not self.checkExists() or self.doOverwrite:
+            self.open()
+            cv2.imwrite(f'{self.target}', self.image)
+            return f'{self.rawfile} saved as {self.target}'
+        else:
+            return f'{self.rawfile} skipped. {self.target} already exists'
 
 # copy exif
 # get date
-# set overwrite
 
 def main():
     tic = process_time()
 
-    p = Photo('samples/_DSC0870.NEF')
-    p.open().resize(1920).enhance().save()
-    print(p)
+    p = Photo('samples/_DSC0241.NEF')
+    p.resize(1920).enhance()
+    print(p.save())
     del p
 
     toc = process_time()
