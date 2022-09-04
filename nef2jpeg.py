@@ -14,13 +14,8 @@ class Photo:
 
     def __str__(self) -> str:
         m = f'File {self.rawfile} with name {self.filename} in dir {self.dirname} will be opened'
-        
-        if self.boxSize:
-            m = f'{m}\nThe photo will be resized to fit a {self.boxSize}x{self.boxSize}px box.'
-
-        if self.doEnhance:
-            m = f'{m}\nThe photo will be enhanced using Ying New Image Contrast Enhancement'
-
+        m = f'{m}\nThe photo will be resized to fit a {self.boxSize}x{self.boxSize}px box.' if self.boxSize else m
+        m = f'{m}\nThe photo will be enhanced using Ying New Image Contrast Enhancement' if self.doEnhance else m
         m = f'{m}\nIt will be saved as {self.target}'
 
         if self.doOverwrite:
@@ -32,16 +27,9 @@ class Photo:
 
     def __repr__(self) -> str:
         m = f'Photo("{self.rawfile}")'
-
-        if self.boxSize:
-            m = f'{m}.resize({self.boxSize})'
-
-        if self.doEnhance:
-            m = f'{m}.enhance()'
-
-        if self.doOverwrite:
-            m = f'{m}.overwrite()'
-
+        m = f'{m}.resize({self.boxSize})' if self.boxSize else m
+        m = f'{m}.enhance()' if self.doEnhance else m
+        m = f'{m}.overwrite()' if self.doOverwrite else m
         return m
 
     def resize(self, boxSize) -> 'Photo':
