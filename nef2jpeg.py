@@ -93,13 +93,15 @@ class Photo:
 def main():
     tic = process_time()
 
-    p = Photo('samples/_DSC0241.NEF')
-    p.resize(1920).enhance()
-    print(p.save())
-    del p
+    folder ='./samples'
 
+    for root, directories, files in os.walk(folder):
+        for f in files:
+            if f.lower().endswith('.nef'):
+                print(Photo(os.path.join(root, f)).resize(1920).enhance().save())
+    
     toc = process_time()
-    print('Duur: ', toc-tic, ' sec')
+    print(f'Processed in {toc-tic:.4f} sec')
 
 if __name__ == '__main__':
     main()
