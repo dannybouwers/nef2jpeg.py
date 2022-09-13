@@ -1,8 +1,6 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.signal
 import cv2
-import sys
 
 __all__=['nice']
 
@@ -150,12 +148,7 @@ def nice(img, mu=0.5, a=-0.3293, b=1.1258):
 
 
 def main():
-    img_name = sys.argv[1]
-    img = cv2.cvtColor(cv2.imread(img_name), cv2.COLOR_BGR2RGB)
-    result = nice(img)
-    plt.imshow(result)
-    plt.show()
-
+    print("Please import this module")
 
 if __name__ == '__main__':
     main()
