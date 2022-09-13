@@ -1,8 +1,12 @@
 import ying
 import rawpy
 import cv2
-from time import process_time
+from time import process_time, sleep
+from datetime import datetime
 import os
+from exiftool import ExifToolHelper
+import subprocess
+import signal
 
 class Photo:
     def __init__(self, name):
@@ -62,6 +66,22 @@ class Photo:
     def checkExists(self) -> bool:
         return os.path.exists(self.target)
 
+    def getExifTag(self, tag='File:FileName'):
+        with ExifToolHelper() as et:
+            t = et.get_tags(self.rawfile, tag)
+            return t[0][tag]
+
+    def prefixDateTime(self) -> 'Photo':
+        t = self.getExifTag('EXIF:DateTimeOriginal')
+        dt = datetime.strptime(t, '%Y:%m:%d %H:%M:%S')
+        prefix = dt.strftime('%Y%m%d_%H%M%S')
+        self.target = os.path.join(self.dirname, f'{prefix}{self.filename}.jpg')
+        return self
+
+    def copyExif(self):
+        result = subprocess.run(['exiftool', '-quiet', '-overwrite_original', '-TagsFromFile', self.rawfile, '--Orientation', self.target], check=True)
+        return result.returncode
+
     def open(self):
         with rawpy.imread(self.rawfile) as raw:
             rgbImg = raw.postprocess(use_camera_wb=True)
@@ -83,25 +103,45 @@ class Photo:
         if not self.checkExists() or self.doOverwrite:
             self.open()
             cv2.imwrite(f'{self.target}', self.image)
+            self.copyExif()
             return f'{self.rawfile} saved as {self.target}'
         else:
             return f'{self.rawfile} skipped. {self.target} already exists'
 
-# copy exif
-# get date
+run = True
+
+def signalHandler(signal, frame):
+    global run
+    print("Save photo's and stop watching...")
+    run = False
+
+def watch(folder, prevFiles:set=None, secs:float=10):
+    if prevFiles is None:
+        prevFiles=set()
+
+    signal.signal(signal.SIGINT, signalHandler)
+    while run:
+        currFiles = set()
+        for root, directories, files in os.walk(folder):
+            for f in files:
+                if f.lower().endswith('.nef'):
+                    currFiles.add(os.path.join(root, f))
+
+        for p in currFiles.difference(prevFiles):
+            print(Photo(p).resize(1920/4).enhance().prefixDateTime().save())
+        
+        sleep(secs)
+        watch(folder, currFiles, secs)
 
 def main():
     tic = process_time()
 
     folder ='./samples'
 
-    for root, directories, files in os.walk(folder):
-        for f in files:
-            if f.lower().endswith('.nef'):
-                print(Photo(os.path.join(root, f)).resize(1920).enhance().save())
+    watch(folder)
     
     toc = process_time()
-    print(f'Processed in {toc-tic:.4f} sec')
+    print(f'Watched for {toc-tic:.4f} seconds')
 
 if __name__ == '__main__':
     main()
