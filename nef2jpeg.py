@@ -7,6 +7,7 @@ import os
 from exiftool import ExifToolHelper
 import subprocess
 import signal
+import argparse
 
 class Photo:
     def __init__(self, name):
@@ -115,7 +116,7 @@ def signalHandler(signal, frame):
     print("Save photo's and stop watching...")
     run = False
 
-def watch(folder, prevFiles:set=None, secs:float=10):
+def watch(folder, secs:float=10, size:int=None, prevFiles:set=None):
     if prevFiles is None:
         prevFiles=set()
 
@@ -128,20 +129,37 @@ def watch(folder, prevFiles:set=None, secs:float=10):
                     currFiles.add(os.path.join(root, f))
 
         for p in currFiles.difference(prevFiles):
-            print(Photo(p).resize(1920/4).enhance().prefixDateTime().save())
+            nicePhoto = Photo(p).enhance().prefixDateTime()
+
+            if size:
+                nicePhoto = nicePhoto.resize(size)
+
+            print(nicePhoto.save())
         
         sleep(secs)
-        watch(folder, currFiles, secs)
+        watch(folder, secs, size, currFiles)
 
 def main():
+    epilog="""The folder and subfolder will be watched.
+    Auto enhancement is performed using Ying et al's A New Image Contrast Enhancement Algorithm Using Exposure Fusion Framework.
+    All options can be replaced with an environment variable with the same name. If both are set, the environment variable is used."""
+    parser = argparse.ArgumentParser(description='Watch a folder for .NEF files, auto enhance them and convert them to .jpg.', epilog=epilog)
+    parser.add_argument('-f', '--folder', default='./photos', help='Folder to watch for .NEF files (default .photos)')
+    parser.add_argument('-s', '--size', type=int, help="Size of a square (in pixels) to fit the output photo's in (optional)")
+    parser.add_argument('-w', '--wait', type=int, default=10, help='Wait time between folder scans (in seconds; default 10)')
+    args = parser.parse_args()
+
+    folder = os.environ.get('FOLDER') if os.environ.get('FOLDER') else args.folder
+    size = os.environ.get('SIZE') if os.environ.get('SIZE') else args.size
+    wait = os.environ.get('WAIT') if os.environ.get('WAIT') else args.wait
+    
     tic = process_time()
 
-    folder ='./samples'
-
-    watch(folder)
+    print(f'Start watching {folder}')
+    watch(folder=folder, secs=wait, size=size)
     
     toc = process_time()
-    print(f'Watched for {toc-tic:.4f} seconds')
+    print(f'Watched {folder} for {toc-tic:.4f} seconds')
 
 if __name__ == '__main__':
     main()
