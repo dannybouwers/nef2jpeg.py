@@ -1,3 +1,4 @@
+from operator import truediv
 import ying
 import rawpy
 import cv2
@@ -14,7 +15,9 @@ class Photo:
         self.rawfile = name
         self.filename = os.path.splitext(os.path.basename(name))[0]
         self.dirname = os.path.dirname(name)
-        self.target = os.path.join(self.dirname, f'{self.filename}.jpg')
+        self.subdir = ''
+        self.prefix = ''
+        self.target = os.path.join(self.dirname, self.subdir, f'{self.prefix}{self.filename}.jpg')
         self.doOverwrite = False
         self.doEnhance = False
         self.boxSize = None
@@ -75,8 +78,8 @@ class Photo:
     def prefixDateTime(self) -> 'Photo':
         t = self.getExifTag('EXIF:DateTimeOriginal')
         dt = datetime.strptime(t, '%Y:%m:%d %H:%M:%S')
-        prefix = dt.strftime('%Y%m%d_%H%M%S')
-        self.target = os.path.join(self.dirname, f'{prefix}{self.filename}.jpg')
+        self.prefix = dt.strftime('%Y%m%d_%H%M%S')
+        self.target = os.path.join(self.dirname, self.subdir, f'{self.prefix}{self.filename}.jpg')
         return self
 
     def copyExif(self):
@@ -97,11 +100,19 @@ class Photo:
 
         return self.image
 
+    def outputFolder(self, dir):
+        self.subdir = dir
+        self.target = os.path.join(self.dirname, self.subdir, f'{self.prefix}{self.filename}.jpg')
+
+        return self
+
     def save (self, target=None) -> str:
         if target is not None:
             self.target = target
 
         if not self.checkExists() or self.doOverwrite:
+            os.makedirs(os.path.dirname(self.target), exist_ok=True)
+
             self.open()
             cv2.imwrite(f'{self.target}', self.image)
             self.copyExif()
@@ -116,50 +127,104 @@ def signalHandler(signal, frame):
     print("Save photo's and stop watching...")
     run = False
 
-def watch(folder, secs:float=10, size:int=None, prevFiles:set=None):
-    if prevFiles is None:
-        prevFiles=set()
+class photoWatcher:
+    def __init__(self, folder) -> None:
+        self.folder = folder
+        self.size = None
+        self.wait = 10
+        self.outputFolder = None
+        self.overwrite = 'skip'
+        self.prevFiles = set()
+        self.datePrefix = False
+        self.runOnce = False
 
-    signal.signal(signal.SIGINT, signalHandler)
-    while run:
-        currFiles = set()
-        for root, directories, files in os.walk(folder):
-            for f in files:
-                if f.lower().endswith('.nef'):
-                    currFiles.add(os.path.join(root, f))
+    def watch(self):
+        # if prevFiles is None:
+        #     prevFiles=set()
+        global run
 
-        for p in currFiles.difference(prevFiles):
-            nicePhoto = Photo(p).enhance().prefixDateTime()
+        signal.signal(signal.SIGINT, signalHandler)
+ 
+        while run:
+            currFiles = set()
+            for root, directories, files in os.walk(self.folder):
+                for f in files:
+                    if f.lower().endswith('.nef'):
+                        currFiles.add(os.path.join(root, f))
 
-            if size:
-                nicePhoto = nicePhoto.resize(size)
+            for p in currFiles.difference(self.prevFiles):
+                nicePhoto = Photo(p).enhance()
 
-            print(nicePhoto.save())
-        
-        sleep(secs)
-        watch(folder, secs, size, currFiles)
+                if self.size:
+                    nicePhoto = nicePhoto.resize(self.size)
+
+                if self.overwrite.lower() == 'always':
+                    nicePhoto = nicePhoto.overwrite()
+
+                if self.overwrite.lower() == 'first' and not self.prevFiles:
+                    nicePhoto = nicePhoto.overwrite()
+
+                if self.outputFolder:
+                    nicePhoto = nicePhoto.outputFolder(self.outputFolder)
+
+                if self.datePrefix:
+                    nicePhoto = nicePhoto.prefixDateTime()
+
+                print(nicePhoto.save())
+            
+            self.prevFiles = currFiles
+
+            if self.runOnce:
+                break
+
+            sleep(self.wait)
+            self.watch()
 
 def main():
     epilog="""The folder and subfolder will be watched.
     Auto enhancement is performed using Ying et al's A New Image Contrast Enhancement Algorithm Using Exposure Fusion Framework.
-    All options can be replaced with an environment variable with the same name. If both are set, the environment variable is used."""
+    All options can be replaced with an environment variable with the same name. If both are set, the environment variable is used.
+    Use Ctrl+c to gracefully quit watching."""
     parser = argparse.ArgumentParser(description='Watch a folder for .NEF files, auto enhance them and convert them to .jpg.', epilog=epilog)
-    parser.add_argument('-f', '--folder', default='./photos', help='Folder to watch for .NEF files (default .photos)')
+    parser.add_argument('-f', '--folder', default='./photos', help='Folder to watch for .NEF files (default=./photos)')
+    parser.add_argument('-o', '--outputfolder', help="Subfolder of the location of a source file to output the the .jpg (optional)")
     parser.add_argument('-s', '--size', type=int, help="Size of a square (in pixels) to fit the output photo's in (optional)")
-    parser.add_argument('-w', '--wait', type=int, default=10, help='Wait time between folder scans (in seconds; default 10)')
+    parser.add_argument('-w', '--wait', type=int, default=10, help='Wait time between folder scans (in seconds; default=10)')
+    parser.add_argument('--overwrite', default='skip', help="Set if jpegs will be overwritten. first will overwrite .jpg at first run, always will always overwrite, skip will skip photo if jpeg exists (default=skip)")
+    parser.add_argument('--dateprefix', action='store_true', help='Add the date and time as prefix to the jpeg-filename (optional)')
+    parser.add_argument('--runonce', action='store_true', help='Scan and convert one time. I.e. do not watch a folder.')
     args = parser.parse_args()
 
     folder = os.environ.get('FOLDER') if os.environ.get('FOLDER') else args.folder
-    size = os.environ.get('SIZE') if os.environ.get('SIZE') else args.size
-    wait = os.environ.get('WAIT') if os.environ.get('WAIT') else args.wait
+
+    watcher = photoWatcher(folder)
     
+    watcher.size = int(os.environ.get('SIZE')) if os.environ.get('SIZE') else args.size
+    watcher.wait = int(os.environ.get('WAIT')) if os.environ.get('WAIT') else args.wait
+    watcher.outputFolder = os.environ.get('OUTPUTFOLDER') if os.environ.get('OUTPUTFOLDER') else args.outputfolder
+    watcher.overwrite = os.environ.get('OVERWRITE') if os.environ.get('OVERWRITE') else args.overwrite
+
+    if (os.environ.get('DATEPREFIX') or "").lower() in ('true', 'yes', 'y'):
+        watcher.datePrefix = True
+    else:
+        watcher.datePrefix = args.dateprefix
+
+    if (os.environ.get('RUNONCE') or "").lower() in ('true', 'yes', 'y'):
+        watcher.runOnce = True
+    else:
+        watcher.runOnce = args.runonce
+
     tic = process_time()
 
-    print(f'Start watching {folder}')
-    watch(folder=folder, secs=wait, size=size)
+    print(f'Start watching {watcher.folder}')
+
+    if not watcher.runOnce:
+        print('Use Ctrl+c to stop watching')
+    
+    watcher.watch()
     
     toc = process_time()
-    print(f'Watched {folder} for {toc-tic:.4f} seconds')
+    print(f'Watched {watcher.folder} for {toc-tic:.4f} seconds')
 
 if __name__ == '__main__':
     main()
