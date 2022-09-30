@@ -1,4 +1,3 @@
-from operator import truediv
 import ying
 import rawpy
 import cv2
@@ -78,7 +77,7 @@ class Photo:
     def prefixDateTime(self) -> 'Photo':
         t = self.getExifTag('EXIF:DateTimeOriginal')
         dt = datetime.strptime(t, '%Y:%m:%d %H:%M:%S')
-        self.prefix = dt.strftime('%Y%m%d_%H%M%S')
+        self.prefix = dt.strftime('%Y-%m-%d_%H.%M.%S')
         self.target = os.path.join(self.dirname, self.subdir, f'{self.prefix}{self.filename}.jpg')
         return self
 
@@ -139,8 +138,6 @@ class photoWatcher:
         self.runOnce = False
 
     def watch(self):
-        # if prevFiles is None:
-        #     prevFiles=set()
         global run
 
         signal.signal(signal.SIGINT, signalHandler)
